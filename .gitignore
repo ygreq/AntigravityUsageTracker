@@ -1,0 +1,26 @@
+# SQLite databases & WAL logs
+usage_tracker.db
+usage_tracker.db-wal
+usage_tracker.db-shm
+*.db
+*.db-wal
+*.db-shm
+
+# Process and runtime logs
+logs/
+*.log
+
+# Python cache & environments
+__pycache__/
+*.py[cod]
+*.class
+.venv/
+venv/
+env/
+
+# Editor & OS files
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

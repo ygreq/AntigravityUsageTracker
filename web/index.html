@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Antigravity Usage Tracker</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Apache ECharts -->
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0fdfa',
+              500: '#14b8a6',
+              600: '#0d9488',
+              900: '#134e4a'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #0b0f19;
+    }
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .glass-card {
+      background: rgba(17, 24, 39, 0.85);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    /* Custom scrollbar for tables */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+  </style>
+</head>
+<body class="text-gray-100 min-h-screen pb-12">
+  <!-- Top Navbar -->
+  <header class="border-b border-gray-800 bg-gray-900/70 sticky top-0 z-50 backdrop-blur">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="h-9 w-9 rounded-lg bg-teal-500/20 border border-teal-500/30 flex items-center justify-center text-teal-400">
+          <i data-lucide="gauge" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <h1 class="text-base font-semibold tracking-tight">Antigravity Usage Tracker</h1>
+            <span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-teal-950 text-teal-400 border border-teal-800/40">LIVE</span>
+          </div>
+          <p class="text-xs text-gray-400">Telemetry Verifier & 5-Day Credit Pacing</p>
+        </div>
+      </div>
+      
+      <!-- Poller Controls & Timer Setting -->
+      <div class="flex items-center space-x-3">
+        <!-- Interval Setting Dropdown -->
+        <div class="flex items-center space-x-1.5 bg-gray-800/80 px-2.5 py-1 rounded-md border border-gray-700/60 text-xs">
+          <i data-lucide="timer" class="w-3.5 h-3.5 text-gray-400"></i>
+          <span class="text-gray-400">Poll:</span>
+          <select id="pollIntervalSelect" onchange="updatePollInterval(this.value)" class="bg-transparent text-gray-200 font-mono focus:outline-none cursor-pointer">
+            <option value="1" class="bg-gray-900">1 min</option>
+            <option value="5" class="bg-gray-900">5 min</option>
+            <option value="10" class="bg-gray-900">10 min</option>
+            <option value="15" selected class="bg-gray-900">15 min</option>
+            <option value="30" class="bg-gray-900">30 min</option>
+            <option value="60" class="bg-gray-900">60 min</option>
+          </select>
+        </div>
+
+        <!-- Next Check Countdown Badge -->
+        <div class="hidden sm:flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-gray-800/60 border border-gray-700/40 text-xs font-mono text-teal-300">
+          <i data-lucide="clock" class="w-3.5 h-3.5 text-teal-400"></i>
+          <span id="countdownText">Next: --:--</span>
+        </div>
+
+        <!-- Manual Poll Button -->
+        <button id="pollBtn" onclick="triggerManualPoll()" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-md bg-teal-600 hover:bg-teal-500 text-xs font-medium transition shadow-sm">
+          <i data-lucide="refresh-cw" class="w-3.5 h-3.5" id="refreshIcon"></i>
+          <span>Check Now</span>
+        </button>
+
+        <!-- About Modal Button -->
+        <button onclick="toggleAboutModal(true)" class="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-md bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-medium transition border border-gray-700/60" title="About Antigravity Usage Tracker">
+          <i data-lucide="info" class="w-3.5 h-3.5 text-teal-400"></i>
+          <span class="hidden sm:inline">About</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    
+    <!-- Group 1: Gemini Models Quota & Pacing -->
+    <div>
+      <div class="flex items-center space-x-2 mb-3">
+        <span class="h-2 w-2 rounded-full bg-teal-400"></span>
+        <h2 class="text-xs font-semibold uppercase tracking-wider text-teal-300">Gemini Models (Flash & Pro)</h2>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Card 1: Gemini Quota Remaining -->
+        <div class="glass-card rounded-xl p-5 relative overflow-hidden border border-teal-500/20">
+          <div class="flex items-center justify-between text-xs text-gray-400 mb-2">
+            <span class="font-semibold text-gray-300">Gemini Weekly Quota</span>
+            <i data-lucide="sparkles" class="w-4 h-4 text-teal-400"></i>
+          </div>
+          <div class="flex items-baseline space-x-1.5">
+            <span id="geminiRemainingVal" class="text-3xl font-bold font-mono text-teal-400">--%</span>
+            <span class="text-xs text-gray-400 font-mono">left</span>
+          </div>
+          <div class="w-full bg-gray-800 rounded-full h-2.5 mt-3 overflow-hidden">
+            <div id="geminiProgress" class="bg-teal-500 h-2.5 rounded-full transition-all duration-500" style="width: 0%"></div>
+          </div>
+          <div class="mt-3 pt-2.5 border-t border-gray-800/80 space-y-1.5 font-mono text-xs">
+            <div>
+              <div class="text-gray-400 text-[11px]">Scheduled Reset:</div>
+              <div id="geminiResetText" class="text-gray-200 font-semibold">--</div>
+            </div>
+            <div>
+              <div class="text-gray-400 text-[11px]">Resets in:</div>
+              <div id="geminiResetCountdownUnder" class="text-teal-300 font-bold">--</div>
+              <div id="geminiResetHoursMins" class="text-teal-400/90 text-xs font-semibold">--</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 2: Gemini 5-Hour Limit -->
+        <div class="glass-card rounded-xl p-5 relative overflow-hidden border border-blue-500/20">
+          <div class="flex items-center justify-between text-xs text-gray-400 mb-2">
+            <span class="font-semibold text-gray-300">Gemini 5-Hour Limit</span>
+            <i data-lucide="shield-alert" class="w-4 h-4 text-blue-400"></i>
+          </div>
+          <div class="flex items-baseline space-x-1.5">
+            <span id="fiveHourRemainingVal" class="text-3xl font-bold font-mono text-blue-400">--%</span>
+            <span class="text-xs text-gray-400 font-mono">cap</span>
+          </div>
+          <div class="w-full bg-gray-800 rounded-full h-2.5 mt-3 overflow-hidden">
+            <div id="fiveHourProgress" class="bg-blue-500 h-2.5 rounded-full transition-all duration-500" style="width: 0%"></div>
+          </div>
+          <div class="mt-3 pt-2.5 border-t border-gray-800/80 space-y-1.5 font-mono text-xs">
+            <div>
+              <div class="text-gray-400 text-[11px]">Scheduled Reset:</div>
+              <div id="fiveHourResetText" class="text-gray-200 font-semibold">--</div>
+            </div>
+            <div>
+              <div class="text-gray-400 text-[11px]">Resets in:</div>
+              <div id="fiveHourResetCountdownUnder" class="text-blue-300 font-bold">--</div>
+              <div id="fiveHourResetHoursMins" class="text-blue-400/90 text-xs font-semibold">--</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 3: Gemini 5-Day Pacing Variance -->
+        <div class="glass-card rounded-xl p-5 relative overflow-hidden">
+          <div class="flex items-center justify-between text-xs text-gray-400 mb-2">
+            <span>Gemini 5-Day Pacing</span>
+            <i data-lucide="target" class="w-4 h-4 text-amber-400"></i>
+          </div>
+          <div class="flex items-baseline space-x-2">
+            <span id="pacingDeltaVal" class="text-3xl font-bold font-mono text-emerald-400">--%</span>
+            <span id="pacingDeltaLabel" class="text-xs text-gray-400">vs ideal</span>
+          </div>
+          <div class="mt-3 flex items-center space-x-2">
+            <span id="pacingBadge" class="px-2 py-0.5 rounded text-xs font-semibold bg-emerald-950/80 text-emerald-400 border border-emerald-800/50">ON TRACK</span>
+          </div>
+          <div id="pacingSummaryText" class="text-[11px] text-gray-400 mt-2">Corridor ±5% of 100% budget</div>
+        </div>
+
+        <!-- Card 4: Gemini Target Burn Rate -->
+        <div class="glass-card rounded-xl p-5 relative overflow-hidden">
+          <div class="flex items-center justify-between text-xs text-gray-400 mb-2">
+            <span>Target Burn Rate</span>
+            <i data-lucide="flame" class="w-4 h-4 text-rose-400"></i>
+          </div>
+          <div class="flex items-baseline space-x-2">
+            <span id="targetBurnRateVal" class="text-3xl font-bold font-mono text-rose-400">--</span>
+            <span class="text-xs text-gray-400">%/hour</span>
+          </div>
+          <div class="mt-3 text-xs text-gray-300">
+            Velocity: <span id="currentVelocityVal" class="font-mono text-gray-100">--</span>
+          </div>
+          <div id="projectedExhaustionText" class="text-[11px] text-gray-400 mt-2 font-mono">Exhausts: --</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Group 2: Claude and GPT Models Quota & Pacing -->
+    <div>
+      <div class="flex items-center space-x-2 mb-3">
+        <span class="h-2 w-2 rounded-full bg-indigo-400"></span>
+        <h2 class="text-xs font-semibold uppercase tracking-wider text-indigo-300">Claude & GPT Models (Opus, Sonnet, GPT-OSS)</h2>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Claude Weekly -->
+        <div class="glass-card rounded-xl p-5 relative overflow-hidden border border-indigo-500/20">
+          <div class="flex items-center justify-between text-xs text-gray-400 mb-2">
+            <span class="font-semibold text-gray-300">Claude/GPT Weekly Quota</span>
+            <i data-lucide="cpu" class="w-4 h-4 text-indigo-400"></i>
+          </div>
+          <div class="flex items-baseline space-x-1.5">
+            <span id="claudeWeeklyVal" class="text-3xl font-bold font-mono text-indigo-400">--%</span>
+            <span class="text-xs text-gray-400 font-mono">left</span>
+          </div>
+          <div class="w-full bg-gray-800 rounded-full h-2.5 mt-3 overflow-hidden">
+            <div id="claudeWeeklyProgress" class="bg-indigo-500 h-2.5 rounded-full transition-all duration-500" style="width: 0%"></div>
+          </div>
+          <div class="mt-3 pt-2.5 border-t border-gray-800/80 space-y-1.5 font-mono text-xs">
+            <div>
+              <div class="text-gray-400 text-[11px]">Scheduled Reset:</div>
+              <div id="claudeWeeklyResetText" class="text-gray-200 font-semibold">--</div>
+            </div>
+            <div>
+              <div class="text-gray-400 text-[11px]">Resets in:</div>
+              <div id="claudeWeeklyCountdownUnder" class="text-indigo-300 font-bold">--</div>
+              <div id="claudeWeeklyHoursMins" class="text-indigo-400/90 text-xs font-semibold">--</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Claude 5-Hour Limit -->
+        <div class="glass-card rounded-xl p-5 relative overflow-hidden border border-sky-500/20">
+          <div class="flex items-center justify-between text-xs text-gray-400 mb-2">
+            <span class="font-semibold text-gray-300">Claude/GPT 5-Hour Limit</span>
+            <i data-lucide="clock" class="w-4 h-4 text-sky-400"></i>
+          </div>
+          <div class="flex items-baseline space-x-1.5">
+            <span id="claude5hVal" class="text-3xl font-bold font-mono text-sky-400">--%</span>
+            <span class="text-xs text-gray-400 font-mono">cap</span>
+          </div>
+          <div class="w-full bg-gray-800 rounded-full h-2.5 mt-3 overflow-hidden">
+            <div id="claude5hProgress" class="bg-sky-500 h-2.5 rounded-full transition-all duration-500" style="width: 0%"></div>
+          </div>
+          <div class="mt-3 pt-2.5 border-t border-gray-800/80 space-y-1.5 font-mono text-xs">
+            <div>
+              <div class="text-gray-400 text-[11px]">Scheduled Reset:</div>
+              <div id="claude5hResetText" class="text-gray-200 font-semibold">--</div>
+            </div>
+            <div>
+              <div class="text-gray-400 text-[11px]">Resets in:</div>
+              <div id="claude5hCountdownUnder" class="text-sky-300 font-bold">--</div>
+              <div id="claude5hHoursMins" class="text-sky-400/90 text-xs font-semibold">--</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Claude 5-Day Pacing -->
+        <div class="glass-card rounded-xl p-5 relative overflow-hidden">
+          <div class="flex items-center justify-between text-xs text-gray-400 mb-2">
+            <span>Claude/GPT Pacing</span>
+            <i data-lucide="target" class="w-4 h-4 text-amber-400"></i>
+          </div>
+          <div class="flex items-baseline space-x-2">
+            <span id="claudePacingDeltaVal" class="text-3xl font-bold font-mono text-indigo-400">--%</span>
+            <span class="text-xs text-gray-400">vs ideal</span>
+          </div>
+          <div class="mt-3 flex items-center space-x-2">
+            <span id="claudePacingBadge" class="px-2 py-0.5 rounded text-xs font-semibold bg-indigo-950/80 text-indigo-300 border border-indigo-800/50">100% UNUSED</span>
+          </div>
+          <div id="claudePacingSummary" class="text-[11px] text-gray-400 mt-2">Full capacity available</div>
+        </div>
+
+        <!-- Claude Burn Rate -->
+        <div class="glass-card rounded-xl p-5 relative overflow-hidden">
+          <div class="flex items-center justify-between text-xs text-gray-400 mb-2">
+            <span>Claude Target Burn</span>
+            <i data-lucide="flame" class="w-4 h-4 text-purple-400"></i>
+          </div>
+          <div class="flex items-baseline space-x-2">
+            <span id="claudeTargetBurnVal" class="text-3xl font-bold font-mono text-purple-400">--</span>
+            <span class="text-xs text-gray-400">%/hour</span>
+          </div>
+          <div class="mt-3 text-xs text-gray-300">
+            Current velocity: <span id="claudeVelocityVal" class="font-mono text-gray-100">0.00 %/hr</span>
+          </div>
+          <div id="claudeExhaustionText" class="text-[11px] text-gray-400 mt-2 font-mono">Status: Full budget intact</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active Chart Model Family Switcher -->
+    <div class="flex items-center justify-between pt-2">
+      <div class="flex items-center space-x-2 text-xs text-gray-400">
+        <i data-lucide="layers" class="w-4 h-4 text-teal-400"></i>
+        <span>Active Model for Charts:</span>
+      </div>
+      <div class="flex rounded-lg bg-gray-800/90 p-1 border border-gray-700/60 text-xs font-medium">
+        <button id="chartModelGemini" onclick="switchChartModel('gemini-weekly')" class="px-3 py-1 rounded-md transition bg-teal-600 text-white shadow-sm flex items-center space-x-1.5">
+          <i data-lucide="sparkles" class="w-3 h-3"></i>
+          <span>Gemini Models</span>
+        </button>
+        <button id="chartModelClaude" onclick="switchChartModel('3p-weekly')" class="px-3 py-1 rounded-md transition text-gray-400 hover:text-white flex items-center space-x-1.5">
+          <i data-lucide="cpu" class="w-3 h-3"></i>
+          <span>Claude & GPT</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Multi-Horizon Breakdown & Aggregations -->
+    <div class="glass-card rounded-xl p-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-gray-800 gap-3">
+        <div>
+          <h2 class="text-sm font-semibold uppercase tracking-wider text-gray-300 flex items-center space-x-2">
+            <i data-lucide="bar-chart-2" class="w-4 h-4 text-blue-400"></i>
+            <span>Multi-Period Aggregation</span>
+          </h2>
+          <p class="text-xs text-gray-400 mt-0.5">Explore consumption volume across different time granularities</p>
+        </div>
+        <!-- Granularity Selector Tabs -->
+        <div class="flex rounded-lg bg-gray-800/80 p-1 border border-gray-700/50 text-xs font-medium">
+          <button onclick="switchGranularity('1h')" id="tab-1h" class="px-3 py-1 rounded-md transition bg-teal-600 text-white shadow-sm">1 Hour</button>
+          <button onclick="switchGranularity('5h')" id="tab-5h" class="px-3 py-1 rounded-md transition text-gray-400 hover:text-white">5 Hours</button>
+          <button onclick="switchGranularity('1d')" id="tab-1d" class="px-3 py-1 rounded-md transition text-gray-400 hover:text-white">1 Day</button>
+          <button onclick="switchGranularity('1w')" id="tab-1w" class="px-3 py-1 rounded-md transition text-gray-400 hover:text-white">1 Week</button>
+        </div>
+      </div>
+      <div id="multiPeriodChart" class="w-full h-80 mt-4"></div>
+    </div>
+
+    <!-- Section 3: Comparative Period Overlays -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <!-- Cycle-over-Cycle Comparison -->
+      <div class="glass-card rounded-xl p-6">
+        <div class="pb-3 border-b border-gray-800">
+          <h3 class="text-sm font-semibold text-gray-300 flex items-center space-x-2">
+            <i data-lucide="git-compare" class="w-4 h-4 text-purple-400"></i>
+            <span>Cycle-over-Cycle Comparison (0 - 120h)</span>
+          </h3>
+          <p class="text-xs text-gray-400 mt-0.5">Normalized overlay of current 5-day cycle vs prior cycles</p>
+        </div>
+        <div id="comparativeChart" class="w-full h-72 mt-3"></div>
+      </div>
+
+      <!-- Today vs Yesterday -->
+      <div class="glass-card rounded-xl p-6">
+        <div class="pb-3 border-b border-gray-800">
+          <h3 class="text-sm font-semibold text-gray-300 flex items-center space-x-2">
+            <i data-lucide="calendar" class="w-4 h-4 text-amber-400"></i>
+            <span>Today vs. Yesterday Hourly Profile</span>
+          </h3>
+          <p class="text-xs text-gray-400 mt-0.5">Hourly delta usage comparison by time of day</p>
+        </div>
+        <div id="dayCompChart" class="w-full h-72 mt-3"></div>
+      </div>
+    </div>
+
+    <!-- Section 4: Historical Usage Logger & Audit Trail -->
+    <div class="glass-card rounded-xl p-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-gray-800 gap-3">
+        <div>
+          <div class="flex items-center space-x-2">
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-gray-300 flex items-center space-x-2">
+              <i data-lucide="history" class="w-4 h-4 text-emerald-400"></i>
+              <span>Historical Usage Logger & Audit Trail</span>
+            </h2>
+            <span id="logTotalCount" class="text-xs font-mono text-gray-400 bg-gray-800 px-2 py-0.5 rounded">0 entries</span>
+          </div>
+          <p class="text-xs text-gray-400 mt-0.5">Continuous telemetry log capturing your usage now and into the future</p>
+        </div>
+        
+        <!-- Filter Controls & Export Buttons -->
+        <div class="flex flex-wrap items-center gap-2">
+          <!-- Bucket Filter -->
+          <select id="logBucketFilter" onchange="loadUsageLogs(0)" class="bg-gray-800 border border-gray-700/60 rounded-md px-2.5 py-1 text-xs text-gray-300 focus:outline-none cursor-pointer">
+            <option value="">All Buckets</option>
+            <option value="gemini-weekly" selected>Gemini Weekly</option>
+            <option value="gemini-5h">Gemini 5-Hour</option>
+            <option value="3p-weekly">Claude/GPT Weekly</option>
+            <option value="3p-5h">Claude/GPT 5-Hour</option>
+          </select>
+          
+          <!-- Search input -->
+          <div class="relative">
+            <input type="text" id="logSearchInput" placeholder="Search logs..." oninput="debounceLogSearch()" class="bg-gray-800 border border-gray-700/60 rounded-md pl-7 pr-2.5 py-1 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-teal-500 w-36 sm:w-44 font-mono">
+            <i data-lucide="search" class="w-3.5 h-3.5 text-gray-400 absolute left-2 top-2"></i>
+          </div>
+
+          <!-- Export CSV -->
+          <a id="exportCsvBtn" href="/api/logs/export.csv?bucket_id=gemini-weekly" download class="flex items-center space-x-1 px-2.5 py-1 rounded-md bg-gray-800 hover:bg-gray-700 text-xs font-medium text-gray-300 border border-gray-700/60 transition">
+            <i data-lucide="download" class="w-3.5 h-3.5 text-emerald-400"></i>
+            <span>Export CSV</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- Logs Table -->
+      <div class="overflow-x-auto mt-4 max-h-96 overflow-y-auto rounded-lg border border-gray-800">
+        <table class="w-full text-left text-xs border-collapse">
+          <thead class="bg-gray-900/90 sticky top-0 text-gray-400 uppercase font-mono text-[11px] border-b border-gray-800">
+            <tr>
+              <th class="py-2.5 px-4">Timestamp (UTC)</th>
+              <th class="py-2.5 px-4">Group & Bucket</th>
+              <th class="py-2.5 px-4 text-right">Remaining %</th>
+              <th class="py-2.5 px-4 text-right">Used %</th>
+              <th class="py-2.5 px-4 text-right">Delta Consumed</th>
+              <th class="py-2.5 px-4">Reset Target</th>
+            </tr>
+          </thead>
+          <tbody id="logsTableBody" class="divide-y divide-gray-800/60 font-mono text-gray-300">
+            <tr>
+              <td colspan="6" class="text-center py-6 text-gray-500 font-sans">Loading audit records...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      <div class="flex items-center justify-between mt-3 text-xs text-gray-400">
+        <span id="logPageInfo">Showing 0-0 of 0</span>
+        <div class="flex space-x-2">
+          <button id="logPrevBtn" onclick="prevLogPage()" class="px-2.5 py-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 disabled:opacity-40 disabled:cursor-not-allowed">Previous</button>
+          <button id="logNextBtn" onclick="nextLogPage()" class="px-2.5 py-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 disabled:opacity-40 disabled:cursor-not-allowed">Next</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-xs text-gray-500 border-t border-gray-800/60 pt-6 mt-8">
+    Antigravity Telemetry & Quota Pacing Engine • Local Service running on port 8778
+  </footer>
+
+  <!-- About Modal -->
+  <div id="aboutModal" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="glass-card max-w-lg w-full rounded-2xl p-6 border border-gray-700 shadow-2xl relative space-y-4">
+      <div class="flex items-center justify-between border-b border-gray-800 pb-3">
+        <div class="flex items-center space-x-2.5">
+          <div class="h-8 w-8 rounded-lg bg-teal-500/20 border border-teal-500/30 flex items-center justify-center text-teal-400">
+            <i data-lucide="gauge" class="w-4 h-4"></i>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-gray-100">Antigravity Usage Tracker</h3>
+            <p class="text-xs text-gray-400">Telemetry Verifier & 5-Day Credit Pacing</p>
+          </div>
+        </div>
+        <button onclick="toggleAboutModal(false)" class="text-gray-400 hover:text-gray-200 text-lg leading-none p-1">
+          ✕
+        </button>
+      </div>
+
+      <div class="text-xs text-gray-300 space-y-3 leading-relaxed">
+        <p>
+          <strong class="text-teal-300">⚡ Zero-Cost Telemetry:</strong> Queries your local Antigravity runtime directly via 
+          <code class="bg-gray-800 px-1 py-0.5 rounded text-teal-300 font-mono">agy -p "/usage" --output-format json</code>, 
+          consuming <strong>0 LLM tokens</strong> and incurring no API cost.
+        </p>
+        <p>
+          <strong class="text-blue-300">🔇 100% Silent Background Execution:</strong> Runs completely headless using native Windows process creation flags (no flashing terminal windows or focus stealing).
+        </p>
+        <p>
+          <strong class="text-amber-300">🎯 5-Day Credit Pacing:</strong> Automatically calculates your ideal linear burn rate corridor (±5%) so you consume 100% of your quota smoothly without starving before reset.
+        </p>
+        <p>
+          <strong class="text-indigo-300">📊 Multi-Period Analytics:</strong> Visualizes usage across 1-hour, 5-hour, 1-day, and 1-week intervals with cycle-over-cycle comparisons and audit logging.
+        </p>
+      </div>
+
+      <div class="pt-3 border-t border-gray-800 flex items-center justify-between text-xs">
+        <a href="https://github.com/ygreq/AntigravityUsageTracker" target="_blank" rel="noopener noreferrer" class="flex items-center space-x-1.5 text-teal-400 hover:text-teal-300 font-medium">
+          <i data-lucide="github" class="w-4 h-4"></i>
+          <span>github.com/ygreq/AntigravityUsageTracker</span>
+        </a>
+        <button onclick="toggleAboutModal(false)" class="px-3 py-1.5 rounded-md bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-medium transition">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js?v=1.6"></script>
+</body>
+</html>
