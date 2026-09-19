@@ -114,13 +114,19 @@ cd AntigravityUsageTracker
 pip install -r requirements.txt
 ```
 
-Launch the dashboard via double-clicking `run_tracker.bat` (Windows) or running:
+### 1. Launching the App
 
-```bash
-python -m tracker.server
-```
+* **🔇 Silent Background Mode (Recommended - No CMD window)**:
+  Double-click **`run_silent.vbs`**. The server runs completely hidden in the background with **zero terminal windows**, and automatically opens the dashboard in your default browser.
+  To stop the background server at any time, double-click **`stop_tracker.bat`**.
 
-Open your browser at: **`http://127.0.0.1:8778`**
+* **🖥️ Console Mode (With logs)**:
+  Double-click `run_tracker.bat` or run in terminal:
+  ```bash
+  python -m tracker.server
+  ```
+
+Dashboard URL: **`http://127.0.0.1:8778`**
 
 ### 2. Terminal CLI Commands
 You can also query status or trigger checks directly from any terminal:
@@ -143,7 +149,9 @@ You can also query status or trigger checks directly from any terminal:
 AntigravityUsageTracker/
 ├── config.json                 # Polling intervals, server port, bucket configurations
 ├── requirements.txt            # Python dependencies (fastapi, uvicorn, rich)
-├── run_tracker.bat             # Desktop launcher script
+├── run_silent.vbs              # 100% silent background launcher (zero CMD window)
+├── run_tracker.bat             # Interactive console launcher
+├── stop_tracker.bat            # One-click script to stop background service
 ├── README.md                   # Complete documentation & system architecture
 ├── WALKTHROUGH.md              # Feature verification and changelog
 ├── printscreens/               # UI dashboard screenshots

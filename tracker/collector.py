@@ -1,6 +1,8 @@
 import json
 import subprocess
 import sys
+import os
+import shutil
 import logging
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
@@ -37,9 +39,12 @@ def parse_usage_output(data: Dict[str, Any], timestamp_iso: Optional[str] = None
     return snapshots
 
 def poll_agy_usage(agy_executable: str = "agy", timeout_seconds: int = 30) -> Optional[Dict[str, Any]]:
-    """Runs 'agy -p "/usage" --output-format json' and parses JSON output."""
+    """Runs 'agy -p "/usage" --output-format json' and parses JSON output headlessly."""
     try:
-        cmd = [agy_executable, "-p", "/usage", "--output-format", "json"]
+        # Resolve full path to executable so Python runs CreateProcessW directly without cmd.exe
+        resolved_exe = shutil.which(agy_executable) or agy_executable
+        cmd = [resolved_exe, "-p", "/usage", "--output-format", "json"]
+
         extra_kwargs = {}
         if sys.platform == "win32":
             extra_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
@@ -48,13 +53,21 @@ def poll_agy_usage(agy_executable: str = "agy", timeout_seconds: int = 30) -> Op
             si.wShowWindow = 0  # SW_HIDE
             extra_kwargs["startupinfo"] = si
 
+        # Strictly block browser launches, popups, and interactive prompts
+        env = os.environ.copy()
+        env["CI"] = "1"
+        env["DEBIAN_FRONTEND"] = "noninteractive"
+        env["BROWSER"] = "none"
+        env["ANTIGRAVITY_BROWSER"] = "none"
+
         proc = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             timeout=timeout_seconds,
             encoding="utf-8",
-            shell=True,
+            shell=False,
+            env=env,
             **extra_kwargs
         )
         if proc.returncode != 0:
