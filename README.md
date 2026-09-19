@@ -200,3 +200,16 @@ AntigravityUsageTracker/
     ├── index.html              # Dark-mode dashboard with family switcher & setup modal
     └── app.js                  # ECharts visualizations, family pool metrics & reactive state
 ```
+
+---
+
+## ☕ Support
+
+If this integration is helpful to you and you'd like to buy me a coffee:
+
+<a href="https://www.buymeacoffee.com/ygreq">
+  <img src="https://img.shields.io/badge/Buy%20Me%20A%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me A Coffee" />
+</a>
+
+Direct link: [buymeacoffee.com/ygreq](https://www.buymeacoffee.com/ygreq)
+

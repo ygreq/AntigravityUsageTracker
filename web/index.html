@@ -492,8 +492,12 @@
     </div>
   </main>
 
-  <footer class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-xs text-gray-500 border-t border-gray-800/60 pt-6 mt-8">
-    Antigravity Telemetry & Quota Pacing Engine • Multi-User Family Hub running on port 8778
+  <footer class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-xs text-gray-500 border-t border-gray-800/60 pt-6 mt-8 flex flex-col sm:flex-row items-center justify-between gap-3">
+    <span>Antigravity Telemetry & Quota Pacing Engine • Multi-User Family Hub running on port 8778</span>
+    <a href="https://buymeacoffee.com/ygreq" target="_blank" rel="noopener noreferrer" class="flex items-center space-x-1.5 text-amber-400 hover:text-amber-300 font-medium transition">
+      <i data-lucide="coffee" class="w-3.5 h-3.5"></i>
+      <span>Buy Me a Coffee</span>
+    </a>
   </footer>
 
   <!-- Family Connection Modal -->
@@ -588,12 +592,16 @@
         </p>
       </div>
 
-      <div class="pt-3 border-t border-gray-800 flex items-center justify-between text-xs">
-        <a href="https://github.com/ygreq/AntigravityUsageTracker" target="_blank" rel="noopener noreferrer" class="flex items-center space-x-1.5 text-teal-400 hover:text-teal-300 font-medium">
-          <i data-lucide="github" class="w-4 h-4"></i>
-          <span>github.com/ygreq/AntigravityUsageTracker</span>
+      <div class="pt-3 border-t border-gray-800 flex items-center justify-between text-xs gap-2">
+        <a href="https://github.com/ygreq/AntigravityUsageTracker" target="_blank" rel="noopener noreferrer" class="flex items-center space-x-1.5 text-teal-400 hover:text-teal-300 font-medium truncate">
+          <i data-lucide="github" class="w-4 h-4 flex-shrink-0"></i>
+          <span class="truncate">GitHub</span>
         </a>
-        <button onclick="toggleAboutModal(false)" class="px-3 py-1.5 rounded-md bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-medium transition">
+        <a href="https://buymeacoffee.com/ygreq" target="_blank" rel="noopener noreferrer" class="flex items-center space-x-1.5 text-amber-400 hover:text-amber-300 font-medium">
+          <i data-lucide="coffee" class="w-4 h-4 flex-shrink-0"></i>
+          <span>Buy Me a Coffee</span>
+        </a>
+        <button onclick="toggleAboutModal(false)" class="px-3 py-1.5 rounded-md bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-medium transition flex-shrink-0">
           Close
         </button>
       </div>
