@@ -101,6 +101,15 @@ Implemented in [`tracker/pacing_engine.py`](tracker/pacing_engine.py):
   79h 3m
   ```
 
+### 6. Multi-User & Family Sharing Architecture
+Designed for households and teams with multiple developer machines:
+
+* **Central Hub**: Your primary workstation runs the FastAPI server (listening on `0.0.0.0:8778`), maintaining SQLite storage and pacing calculations for each member independently.
+* **Remote Telemetry Endpoint (`POST /api/family/report`)**: Family members' laptops execute `agy -p "/usage" --output-format json` locally and post telemetry to your hub over LAN, Wi-Fi, or VPN (e.g. Tailscale).
+* **Automatic Database Migration**: Database schemas seamlessly map historical data to the primary user while supporting new family members dynamically.
+* **Family Pool Overview**: A dashboard card visualizes combined weekly burn volume, device online status, and quota share across all family members.
+* **Member Switcher**: An interactive dropdown in the top navbar toggles all dashboard charts, burn corridors, and audit logs between family members instantly.
+
 ---
 
 ## 🚀 Getting Started
@@ -114,7 +123,7 @@ cd AntigravityUsageTracker
 pip install -r requirements.txt
 ```
 
-### 1. Launching the App
+### 2. Launching the App
 
 * **🔇 Silent Background Mode (Recommended - No CMD window)**:
   Double-click **`run_silent.vbs`**. The server runs completely hidden in the background with **zero terminal windows**, and automatically opens the dashboard in your default browser.
@@ -126,9 +135,29 @@ pip install -r requirements.txt
   python -m tracker.server
   ```
 
-Dashboard URL: **`http://127.0.0.1:8778`**
+Dashboard URL: **`http://localhost:8778`**
 
-### 2. Terminal CLI Commands
+---
+
+## 👨‍👩‍👧‍👦 Connecting Family Members & Secondary Devices
+
+To monitor quota from another computer in your household, run the client agent on that machine:
+
+### Option A: Windows PowerShell (Zero Install)
+```powershell
+.\client_agent\report_usage.ps1 -ServerUrl "http://<YOUR_HUB_IP>:8778" -UserId "alex" -DisplayName "Alex" -Loop -IntervalMinutes 15
+```
+
+### Option B: Python (Windows, macOS, Linux)
+```bash
+python client_agent/report_usage.py --server "http://<YOUR_HUB_IP>:8778" --user alex --name "Alex" --loop --interval 15
+```
+
+> Replace `<YOUR_HUB_IP>` with your workstation's local IP (e.g. `192.168.1.100` or Tailscale IP). Once submitted, the new member appears instantly in the dropdown and family cards.
+
+---
+
+### 3. Terminal CLI Commands
 You can also query status or trigger checks directly from any terminal:
 
 * **View live quota status & pacing summary**:
@@ -147,7 +176,7 @@ You can also query status or trigger checks directly from any terminal:
 
 ```
 AntigravityUsageTracker/
-├── config.json                 # Polling intervals, server port, bucket configurations
+├── config.json                 # Polling intervals, server port, bucket & network configurations
 ├── requirements.txt            # Python dependencies (fastapi, uvicorn, rich)
 ├── run_silent.vbs              # 100% silent background launcher (zero CMD window)
 ├── run_tracker.bat             # Interactive console launcher
@@ -155,15 +184,19 @@ AntigravityUsageTracker/
 ├── README.md                   # Complete documentation & system architecture
 ├── WALKTHROUGH.md              # Feature verification and changelog
 ├── printscreens/               # UI dashboard screenshots
+├── client_agent/               # Family member reporting agents
+│   ├── report_usage.ps1        # PowerShell reporting script (Windows)
+│   ├── report_usage.py         # Python cross-platform client
+│   └── README.md               # Family setup instructions
 ├── tracker/
 │   ├── __init__.py
 │   ├── collector.py            # Headless execution of agy CLI & data extraction
-│   ├── database.py             # SQLite schemas, audit trail queries & CSV export
+│   ├── database.py             # SQLite schemas, multi-user migration, audit logs & CSV export
 │   ├── pacing_engine.py        # Pacing math, burn rates, and countdown calculations
-│   ├── aggregator.py           # Multi-period aggregations (1h, 5h, 1d, 1w)
-│   ├── server.py               # FastAPI backend & asynchronous poller task
+│   ├── aggregator.py           # Multi-period aggregations & family pool distribution
+│   ├── server.py               # FastAPI backend, family ingestion endpoints & async poller
 │   └── cli.py                  # Rich terminal CLI dashboard
 └── web/
-    ├── index.html              # Dark-mode dashboard (Tailwind CSS, Lucide icons)
-    └── app.js                  # ECharts visualizations, countdown ticker & log UI
+    ├── index.html              # Dark-mode dashboard with family switcher & setup modal
+    └── app.js                  # ECharts visualizations, family pool metrics & reactive state
 ```

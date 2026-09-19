@@ -3,6 +3,9 @@ let multiPeriodChart = null;
 let comparativeChart = null;
 let dayCompChart = null;
 
+let currentUserId = 'default';
+let activeUsersList = [];
+let activeChartBucket = 'gemini-weekly';
 let currentGranularity = '1h';
 let secondsUntilNextPoll = 0;
 let countdownTimer = null;
@@ -75,10 +78,14 @@ async function triggerManualPoll() {
   if (icon) icon.classList.add('animate-spin');
   try {
     await fetch('/api/poll', { method: 'POST' });
-    await refreshDashboard();
+    setTimeout(async () => {
+      await refreshDashboard();
+      await loadUsageLogs(0);
+      if (btn) btn.disabled = false;
+      if (icon) icon.classList.remove('animate-spin');
+    }, 4000);
   } catch (e) {
     console.error('Manual poll failed:', e);
-  } finally {
     if (btn) btn.disabled = false;
     if (icon) icon.classList.remove('animate-spin');
   }
@@ -98,8 +105,24 @@ function startCountdownTicker() {
   }, 1000);
 }
 
-let activeChartBucket = 'gemini-weekly';
+// Switch Active Family Member
+async function switchUser(userId) {
+  currentUserId = userId;
+  const sel = document.getElementById('userSelect');
+  if (sel) sel.value = userId;
 
+  const match = activeUsersList.find(u => u.user_id === userId);
+  const displayName = match ? match.display_name : userId;
+  const badge = document.getElementById('activeMemberBadge');
+  if (badge) {
+    badge.textContent = `Viewing: ${displayName}`;
+  }
+
+  await refreshDashboard();
+  await loadUsageLogs(0);
+}
+
+// Switch Active Model Family (Gemini vs Claude)
 async function switchChartModel(bucketId) {
   activeChartBucket = bucketId;
   const gemBtn = document.getElementById('chartModelGemini');
@@ -113,40 +136,139 @@ async function switchChartModel(bucketId) {
     gemBtn.className = 'px-3 py-1 rounded-md transition text-gray-400 hover:text-white flex items-center space-x-1.5';
   }
 
-  // Reload charts with active model
+  // Reload charts with active model and user
   await renderMultiPeriodChart(currentGranularity);
 
-  const compRes = await fetch(`/api/comparative?bucket_id=${bucketId}`);
+  const compRes = await fetch(`/api/comparative?bucket_id=${bucketId}&user_id=${encodeURIComponent(currentUserId)}`);
   const compData = await compRes.json();
   renderComparativeChart(compData);
 
-  const dayRes = await fetch(`/api/day-comparison?bucket_id=${bucketId}`);
+  const dayRes = await fetch(`/api/day-comparison?bucket_id=${bucketId}&user_id=${encodeURIComponent(currentUserId)}`);
   const dayData = await dayRes.json();
   renderDayCompChart(dayData);
 }
 
 async function refreshDashboard() {
   try {
-    // 1. Fetch live status & pacing for both models
-    const statusRes = await fetch('/api/status');
+    // 1. Fetch live status & pacing for the current active user
+    const statusRes = await fetch(`/api/status?user_id=${encodeURIComponent(currentUserId)}`);
     const statusData = await statusRes.json();
+    
+    // Update Users Dropdowns
+    if (statusData.users) {
+      updateUsersDropdowns(statusData.users);
+    }
+
     updateHeaderAndCards(statusData);
 
-    // 2. Render Multi-Period Chart for active model
+    // 2. Fetch family summary pool
+    await refreshFamilySummary();
+
+    // 3. Render Multi-Period Chart for active model & user
     await renderMultiPeriodChart(currentGranularity);
 
-    // 3. Render Comparative Cycles & Day Comparison for active model
-    const compRes = await fetch(`/api/comparative?bucket_id=${activeChartBucket}`);
+    // 4. Render Comparative Cycles & Day Comparison for active model & user
+    const compRes = await fetch(`/api/comparative?bucket_id=${activeChartBucket}&user_id=${encodeURIComponent(currentUserId)}`);
     const compData = await compRes.json();
     renderComparativeChart(compData);
 
-    const dayRes = await fetch(`/api/day-comparison?bucket_id=${activeChartBucket}`);
+    const dayRes = await fetch(`/api/day-comparison?bucket_id=${activeChartBucket}&user_id=${encodeURIComponent(currentUserId)}`);
     const dayData = await dayRes.json();
     renderDayCompChart(dayData);
 
     if (window.lucide) lucide.createIcons();
   } catch (e) {
     console.error('Error refreshing dashboard:', e);
+  }
+}
+
+function updateUsersDropdowns(users) {
+  activeUsersList = users;
+  const userSelect = document.getElementById('userSelect');
+  const logUserFilter = document.getElementById('logUserFilter');
+
+  if (userSelect) {
+    const prevVal = userSelect.value || currentUserId;
+    userSelect.innerHTML = users.map(u => `
+      <option value="${u.user_id}" class="bg-gray-900" ${u.user_id === prevVal ? 'selected' : ''}>
+        ${u.display_name}
+      </option>
+    `).join('');
+    userSelect.value = prevVal;
+  }
+
+  if (logUserFilter) {
+    const prevLogVal = logUserFilter.value;
+    logUserFilter.innerHTML = '<option value="">All Members</option>' + users.map(u => `
+      <option value="${u.user_id}" class="bg-gray-900" ${u.user_id === prevLogVal ? 'selected' : ''}>
+        ${u.display_name}
+      </option>
+    `).join('');
+    logUserFilter.value = prevLogVal;
+  }
+}
+
+async function refreshFamilySummary() {
+  try {
+    const res = await fetch('/api/family/summary');
+    const data = await res.json();
+    if (!data || !data.users) return;
+
+    document.getElementById('familyDeviceCount').textContent = String(data.total_users || 1);
+    document.getElementById('familyTotalBurn').textContent = `${data.total_family_consumed_7d || 0.0}%`;
+
+    const grid = document.getElementById('familyMembersGrid');
+    if (!grid) return;
+
+    grid.innerHTML = data.users.map(u => {
+      const isSelected = (u.user_id === currentUserId);
+      const onlineIndicator = u.is_online
+        ? '<span class="h-2 w-2 rounded-full bg-emerald-400 inline-block animate-pulse" title="Active recently"></span>'
+        : '<span class="h-2 w-2 rounded-full bg-gray-500 inline-block" title="Offline / idle"></span>';
+
+      const borderClass = isSelected ? 'border-teal-500 bg-teal-950/20' : 'border-gray-800 bg-gray-900/80 hover:border-gray-700';
+
+      return `
+        <div onclick="switchUser('${u.user_id}')" class="cursor-pointer rounded-xl p-3 border ${borderClass} transition flex flex-col justify-between space-y-2.5">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2 truncate">
+              ${onlineIndicator}
+              <span class="font-semibold text-xs text-gray-200 truncate">${u.display_name}</span>
+            </div>
+            <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-gray-800 text-gray-400">${u.share_pct}% share</span>
+          </div>
+
+          <!-- Mini quota bars -->
+          <div class="space-y-1.5 text-[11px] font-mono">
+            <div>
+              <div class="flex justify-between text-gray-400 text-[10px]">
+                <span>Gemini</span>
+                <span class="text-teal-400 font-bold">${u.gemini_remaining_pct}% left</span>
+              </div>
+              <div class="w-full bg-gray-800 rounded-full h-1.5 mt-0.5 overflow-hidden">
+                <div class="bg-teal-500 h-1.5 rounded-full" style="width: ${u.gemini_remaining_pct}%"></div>
+              </div>
+            </div>
+            <div>
+              <div class="flex justify-between text-gray-400 text-[10px]">
+                <span>Claude/GPT</span>
+                <span class="text-indigo-400 font-bold">${u.claude_remaining_pct}% left</span>
+              </div>
+              <div class="w-full bg-gray-800 rounded-full h-1.5 mt-0.5 overflow-hidden">
+                <div class="bg-indigo-500 h-1.5 rounded-full" style="width: ${u.claude_remaining_pct}%"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="pt-1.5 border-t border-gray-800/80 flex items-center justify-between text-[10px] text-gray-400">
+            <span>7d Burn: <strong class="text-amber-400 font-mono">${u.consumed_7d_pct}%</strong></span>
+            <span class="text-teal-400 text-[10px] font-medium">${isSelected ? '● ACTIVE' : 'Switch →'}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch (e) {
+    console.error('Failed to load family summary:', e);
   }
 }
 
@@ -190,13 +312,20 @@ function updateHeaderAndCards(data) {
     document.getElementById('geminiProgress').style.width = `${remPct}%`;
     document.getElementById('geminiResetText').textContent = formatResetDateTime(gemini.reset_time);
     
-    // Explicit Days and Hours + Hours & Minutes countdown
     const cd = gemini.countdown;
     const cdText = (cd && cd.text) ? cd.text : 'N/A';
     const underElem = document.getElementById('geminiResetCountdownUnder');
     if (underElem) underElem.textContent = cdText;
     const hmElem = document.getElementById('geminiResetHoursMins');
     if (hmElem) hmElem.textContent = getRemainingHoursMins(gemini.reset_time, cd);
+  } else {
+    document.getElementById('geminiRemainingVal').textContent = `--%`;
+    document.getElementById('geminiProgress').style.width = `0%`;
+    document.getElementById('geminiResetText').textContent = `--`;
+    const underElem = document.getElementById('geminiResetCountdownUnder');
+    if (underElem) underElem.textContent = `--`;
+    const hmElem = document.getElementById('geminiResetHoursMins');
+    if (hmElem) hmElem.textContent = `--`;
   }
 
   if (fiveH) {
@@ -211,6 +340,10 @@ function updateHeaderAndCards(data) {
     if (underElem) underElem.textContent = cdText;
     const hmElem = document.getElementById('fiveHourResetHoursMins');
     if (hmElem) hmElem.textContent = getRemainingHoursMins(fiveH.reset_time, cd);
+  } else {
+    document.getElementById('fiveHourRemainingVal').textContent = `--%`;
+    document.getElementById('fiveHourProgress').style.width = `0%`;
+    document.getElementById('fiveHourResetText').textContent = `--`;
   }
 
   // Gemini Pacing
@@ -260,6 +393,10 @@ function updateHeaderAndCards(data) {
     if (underElem) underElem.textContent = cdText;
     const hmElem = document.getElementById('claudeWeeklyHoursMins');
     if (hmElem) hmElem.textContent = getRemainingHoursMins(claude.reset_time, cd);
+  } else {
+    document.getElementById('claudeWeeklyVal').textContent = `--%`;
+    document.getElementById('claudeWeeklyProgress').style.width = `0%`;
+    document.getElementById('claudeWeeklyResetText').textContent = `--`;
   }
 
   if (claude5h) {
@@ -274,6 +411,10 @@ function updateHeaderAndCards(data) {
     if (underElem) underElem.textContent = cdText;
     const hmElem = document.getElementById('claude5hHoursMins');
     if (hmElem) hmElem.textContent = getRemainingHoursMins(claude5h.reset_time, cd);
+  } else {
+    document.getElementById('claude5hVal').textContent = `--%`;
+    document.getElementById('claude5hProgress').style.width = `0%`;
+    document.getElementById('claude5hResetText').textContent = `--`;
   }
 
   // Claude & GPT Pacing
@@ -307,21 +448,6 @@ function updateHeaderAndCards(data) {
   }
 }
 
-async function triggerManualPoll() {
-  const icon = document.getElementById('refreshIcon');
-  icon.classList.add('animate-spin');
-  try {
-    await fetch('/api/poll', { method: 'POST' });
-    setTimeout(async () => {
-      await refreshDashboard();
-      await loadUsageLogs(0);
-      icon.classList.remove('animate-spin');
-    }, 4500);
-  } catch (e) {
-    icon.classList.remove('animate-spin');
-  }
-}
-
 // --- Multi-Period Chart ---
 async function switchGranularity(granularity) {
   currentGranularity = granularity;
@@ -337,7 +463,7 @@ async function switchGranularity(granularity) {
 }
 
 async function renderMultiPeriodChart(granularity) {
-  const res = await fetch(`/api/multi-period?granularity=${granularity}&bucket_id=gemini-weekly`);
+  const res = await fetch(`/api/multi-period?granularity=${granularity}&bucket_id=${activeChartBucket}&user_id=${encodeURIComponent(currentUserId)}`);
   const data = await res.json();
 
   const option = {
@@ -510,15 +636,20 @@ function debounceLogSearch() {
 
 async function loadUsageLogs(offset = 0) {
   currentLogOffset = offset;
+  const user = document.getElementById('logUserFilter') ? document.getElementById('logUserFilter').value : '';
   const bucket = document.getElementById('logBucketFilter').value;
   const search = document.getElementById('logSearchInput').value.trim();
 
   // Update export CSV link
   const exportBtn = document.getElementById('exportCsvBtn');
-  exportBtn.href = `/api/logs/export.csv?${bucket ? 'bucket_id=' + encodeURIComponent(bucket) : ''}`;
+  let csvParams = [];
+  if (bucket) csvParams.push('bucket_id=' + encodeURIComponent(bucket));
+  if (user) csvParams.push('user_id=' + encodeURIComponent(user));
+  exportBtn.href = `/api/logs/export.csv${csvParams.length ? '?' + csvParams.join('&') : ''}`;
 
   let url = `/api/logs?limit=${LOG_PAGE_SIZE}&offset=${offset}`;
   if (bucket) url += `&bucket_id=${encodeURIComponent(bucket)}`;
+  if (user) url += `&user_id=${encodeURIComponent(user)}`;
   if (search) url += `&search=${encodeURIComponent(search)}`;
 
   try {
@@ -544,7 +675,7 @@ function renderLogsTable(data) {
   document.getElementById('logNextBtn').disabled = (end >= total);
 
   if (logs.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-6 text-gray-500 font-sans">No audit records found matching query.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center py-6 text-gray-500 font-sans">No audit records found matching query.</td></tr>`;
     return;
   }
 
@@ -558,9 +689,16 @@ function renderLogsTable(data) {
     
     const dateFormatted = r.timestamp.replace('T', ' ').replace('Z', '');
     const resetFormatted = r.reset_time ? r.reset_time.replace('T', ' ').replace('Z', '') : 'N/A';
+    const memberName = r.display_name || r.user_id || 'You';
+    const isPrimary = (r.user_id === 'default');
 
     return `
       <tr class="hover:bg-gray-800/40 transition">
+        <td class="py-2.5 px-4">
+          <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-sans font-medium ${isPrimary ? 'bg-teal-950 text-teal-300 border border-teal-800/40' : 'bg-indigo-950 text-indigo-300 border border-indigo-800/40'}">
+            ${memberName}
+          </span>
+        </td>
         <td class="py-2.5 px-4 text-gray-400">${dateFormatted}</td>
         <td class="py-2.5 px-4">
           <div class="font-sans font-medium text-gray-200">${r.group_name}</div>
@@ -583,6 +721,16 @@ function prevLogPage() {
 
 function nextLogPage() {
   loadUsageLogs(currentLogOffset + LOG_PAGE_SIZE);
+}
+
+function toggleFamilyModal(show) {
+  const modal = document.getElementById('familyModal');
+  if (!modal) return;
+  if (show) {
+    modal.classList.remove('hidden');
+  } else {
+    modal.classList.add('hidden');
+  }
 }
 
 function toggleAboutModal(show) {

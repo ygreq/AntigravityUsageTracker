@@ -2,6 +2,7 @@ import os
 import json
 import csv
 import io
+import re
 import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
@@ -14,12 +15,14 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 import uvicorn
 
 from .database import (
-    init_db, get_latest_snapshots, get_bucket_history, get_usage_logs
+    init_db, get_latest_snapshots, get_bucket_history, get_usage_logs,
+    get_active_users, record_snapshots_batch
 )
-from .collector import collect_and_store
-from .pacing_engine import calculate_pacing
+from .collector import collect_and_store, parse_usage_output
+from .pacing_engine import calculate_pacing, format_remaining_time
 from .aggregator import (
-    get_multi_period_data, get_comparative_cycles, get_today_vs_yesterday
+    get_multi_period_data, get_comparative_cycles, get_today_vs_yesterday,
+    get_family_usage_breakdown
 )
 from .seed_data import seed_sample_history
 
@@ -44,8 +47,9 @@ def load_config() -> Dict[str, Any]:
             logger.error(f"Error reading config: {e}")
     return {
         "poll_interval_minutes": 15,
-        "server_host": "127.0.0.1",
+        "server_host": "0.0.0.0",
         "server_port": 8778,
+        "family_secret": "",
         "default_cycle_duration_hours": 120,
         "pacing_tolerance_percent": 5.0,
         "primary_bucket": "gemini-weekly"
@@ -60,7 +64,7 @@ def save_config(cfg: Dict[str, Any]):
 
 CURRENT_CONFIG = load_config()
 
-app = FastAPI(title="Antigravity Usage & 5-Day Pacing Tracker", version="1.0.0")
+app = FastAPI(title="Antigravity Usage & 5-Day Pacing Tracker", version="1.1.0")
 
 # Background Poller Task with Dynamic Timer
 polling_task: Optional[asyncio.Task] = None
@@ -107,13 +111,68 @@ async def on_shutdown():
     if polling_task:
         polling_task.cancel()
 
-from .pacing_engine import calculate_pacing, format_remaining_time
-
 # --- API Endpoints ---
 
+@app.get("/api/users")
+async def list_users():
+    """Lists all detected family members / devices recorded in the database."""
+    users = get_active_users(DB_PATH)
+    return {"users": users}
+
+@app.get("/api/family/summary")
+async def get_family_summary():
+    """Returns comparative usage metrics and quota breakdown across all family members."""
+    return get_family_usage_breakdown(DB_PATH)
+
+@app.post("/api/family/report")
+async def receive_family_report(payload: Dict[str, Any] = Body(...)):
+    """
+    Ingests usage telemetry from a remote family member's machine.
+    Payload:
+    {
+      "user_id": "alex",
+      "display_name": "Alex",
+      "data": { ...agy output json... },
+      "secret": "..." (optional)
+    }
+    """
+    configured_secret = str(CURRENT_CONFIG.get("family_secret", "")).strip()
+    if configured_secret:
+        provided_secret = str(payload.get("secret", "")).strip()
+        if provided_secret != configured_secret:
+            return JSONResponse(status_code=401, content={"error": "Invalid or missing family authentication secret"})
+
+    raw_user_id = str(payload.get("user_id", "")).strip().lower()
+    if not raw_user_id:
+        return JSONResponse(status_code=400, content={"error": "Missing required field: user_id"})
+
+    clean_user_id = re.sub(r'[^a-z0-9_\-]', '', raw_user_id)
+    if not clean_user_id:
+        return JSONResponse(status_code=400, content={"error": "Invalid user_id format. Use letters, numbers, dashes, underscores."})
+
+    display_name = payload.get("display_name") or clean_user_id.capitalize()
+    usage_data = payload.get("data")
+    if not usage_data or not isinstance(usage_data, dict):
+        return JSONResponse(status_code=400, content={"error": "Missing or invalid 'data' object (must be raw agy usage JSON)"})
+
+    snapshots = parse_usage_output(usage_data)
+    if not snapshots:
+        return JSONResponse(status_code=400, content={"error": "No valid buckets/groups found in provided usage telemetry data"})
+
+    record_snapshots_batch(DB_PATH, snapshots, user_id=clean_user_id, display_name=display_name)
+    logger.info(f"Ingested telemetry for family member '{clean_user_id}' ({display_name}): {len(snapshots)} snapshots recorded")
+
+    return {
+        "status": "success",
+        "user_id": clean_user_id,
+        "display_name": display_name,
+        "recorded_snapshots": len(snapshots),
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+
 @app.get("/api/status")
-async def get_status():
-    latest = get_latest_snapshots(DB_PATH)
+async def get_status(user_id: Optional[str] = Query("default")):
+    latest = get_latest_snapshots(DB_PATH, user_id=user_id)
     now_utc = datetime.now(timezone.utc)
 
     # Attach countdown info to each snapshot
@@ -125,19 +184,23 @@ async def get_status():
 
     gemini_pacing = None
     if gemini_weekly:
-        history = get_bucket_history(DB_PATH, "gemini-weekly", limit=1000)
+        history = get_bucket_history(DB_PATH, "gemini-weekly", limit=1000, user_id=user_id)
         gemini_pacing = calculate_pacing(gemini_weekly, history)
 
     claude_pacing = None
     if claude_weekly:
-        c_history = get_bucket_history(DB_PATH, "3p-weekly", limit=1000)
+        c_history = get_bucket_history(DB_PATH, "3p-weekly", limit=1000, user_id=user_id)
         claude_pacing = calculate_pacing(claude_weekly, c_history)
 
     seconds_until_next = 0
     if next_poll_time:
         seconds_until_next = max(0, int((next_poll_time - now_utc).total_seconds()))
 
+    active_users = get_active_users(DB_PATH)
+
     return {
+        "current_user_id": user_id,
+        "users": active_users,
         "latest_snapshots": latest,
         "primary_pacing": gemini_pacing,
         "claude_gpt_pacing": claude_pacing,
@@ -161,7 +224,6 @@ async def update_settings(payload: Dict[str, Any] = Body(...)):
         if new_val < 1:
             return JSONResponse(status_code=400, content={"error": "Interval must be at least 1 minute"})
         CURRENT_CONFIG["poll_interval_minutes"] = new_val
-        # Immediately reschedule next poll
         next_poll_time = datetime.now(timezone.utc) + timedelta(minutes=new_val)
 
     for k, v in payload.items():
@@ -170,27 +232,19 @@ async def update_settings(payload: Dict[str, Any] = Body(...)):
     save_config(CURRENT_CONFIG)
     return {"status": "success", "config": CURRENT_CONFIG}
 
-@app.post("/api/poll")
-async def trigger_manual_poll():
-    global last_poll_time, next_poll_time
-    last_poll_time = datetime.now(timezone.utc)
-    snaps = collect_and_store(DB_PATH)
-    poll_mins = CURRENT_CONFIG.get("poll_interval_minutes", 15)
-    next_poll_time = last_poll_time + timedelta(minutes=poll_mins)
-    return {"status": "success", "snapshots_count": len(snaps)}
-
 @app.get("/api/pacing")
 async def get_pacing_details(
     bucket_id: str = Query("gemini-weekly"),
+    user_id: Optional[str] = Query("default"),
     cycle_hours: float = Query(120.0),
     tolerance: float = Query(5.0)
 ):
-    latest = get_latest_snapshots(DB_PATH)
+    latest = get_latest_snapshots(DB_PATH, user_id=user_id)
     target_snap = next((s for s in latest if s["bucket_id"] == bucket_id), None)
     if not target_snap:
-        return JSONResponse(status_code=404, content={"error": f"Bucket {bucket_id} not found"})
+        return JSONResponse(status_code=404, content={"error": f"Bucket {bucket_id} for user {user_id} not found"})
 
-    history = get_bucket_history(DB_PATH, bucket_id, limit=1500)
+    history = get_bucket_history(DB_PATH, bucket_id, limit=1500, user_id=user_id)
     pacing_data = calculate_pacing(
         target_snap,
         history,
@@ -202,39 +256,57 @@ async def get_pacing_details(
 @app.get("/api/multi-period")
 async def get_multi_period(
     granularity: str = Query("1h", pattern="^(1h|5h|1d|1w)$"),
-    bucket_id: str = Query("gemini-weekly")
+    bucket_id: str = Query("gemini-weekly"),
+    user_id: Optional[str] = Query("default")
 ):
-    data = get_multi_period_data(DB_PATH, bucket_id, granularity)
+    data = get_multi_period_data(DB_PATH, bucket_id, granularity, user_id=user_id)
     return data
 
 @app.get("/api/comparative")
-async def get_comparative(bucket_id: str = Query("gemini-weekly")):
-    cycles = get_comparative_cycles(DB_PATH, bucket_id)
+async def get_comparative(
+    bucket_id: str = Query("gemini-weekly"),
+    user_id: Optional[str] = Query("default")
+):
+    cycles = get_comparative_cycles(DB_PATH, bucket_id, user_id=user_id)
     return cycles
 
 @app.get("/api/day-comparison")
-async def get_day_comp(bucket_id: str = Query("gemini-weekly")):
-    data = get_today_vs_yesterday(DB_PATH, bucket_id)
+async def get_day_comp(
+    bucket_id: str = Query("gemini-weekly"),
+    user_id: Optional[str] = Query("default")
+):
+    data = get_today_vs_yesterday(DB_PATH, bucket_id, user_id=user_id)
     return data
 
 @app.get("/api/logs")
 async def get_logs(
     bucket_id: Optional[str] = Query(None),
+    user_id: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0)
 ):
-    return get_usage_logs(DB_PATH, bucket_id=bucket_id, search=search, limit=limit, offset=offset)
+    return get_usage_logs(
+        DB_PATH,
+        bucket_id=bucket_id,
+        user_id=user_id,
+        search=search,
+        limit=limit,
+        offset=offset
+    )
 
 @app.get("/api/logs/export.csv")
-async def export_logs_csv(bucket_id: Optional[str] = Query(None)):
-    res = get_usage_logs(DB_PATH, bucket_id=bucket_id, limit=10000, offset=0)
+async def export_logs_csv(
+    bucket_id: Optional[str] = Query(None),
+    user_id: Optional[str] = Query(None)
+):
+    res = get_usage_logs(DB_PATH, bucket_id=bucket_id, user_id=user_id, limit=10000, offset=0)
     rows = res.get("logs", [])
 
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow([
-        "ID", "Timestamp (UTC)", "Group", "Bucket ID", "Bucket Name",
+        "ID", "User ID", "Display Name", "Timestamp (UTC)", "Group", "Bucket ID", "Bucket Name",
         "Window", "Remaining %", "Used %", "Delta Used %", "Reset Time (UTC)", "Description"
     ])
     for r in rows:
@@ -242,7 +314,8 @@ async def export_logs_csv(bucket_id: Optional[str] = Query(None)):
         used_pct = round(float(r["used_fraction"]) * 100.0, 2)
         delta_pct = round(float(r["delta_used"]) * 100.0, 4)
         writer.writerow([
-            r["id"], r["timestamp"], r["group_name"], r["bucket_id"], r["bucket_name"],
+            r["id"], r.get("user_id", "default"), r.get("display_name", "You"),
+            r["timestamp"], r["group_name"], r["bucket_id"], r["bucket_name"],
             r["window_type"], rem_pct, used_pct, delta_pct, r["reset_time"], r["description"]
         ])
 
@@ -260,7 +333,6 @@ async def trigger_manual_poll(background_tasks: BackgroundTasks):
         global last_poll_time, next_poll_time
         last_poll_time = datetime.now(timezone.utc)
         collect_and_store(DB_PATH)
-        # Reset timer
         interval_min = CURRENT_CONFIG.get("poll_interval_minutes", 15)
         next_poll_time = datetime.now(timezone.utc) + timedelta(minutes=interval_min)
 
@@ -274,8 +346,11 @@ app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
 async def serve_dashboard():
     return FileResponse(str(WEB_DIR / "index.html"))
 
-def run_server(host: str = "127.0.0.1", port: int = 8778):
-    uvicorn.run(app, host=host, port=port)
+def run_server(host: Optional[str] = None, port: Optional[int] = None):
+    h = host or CURRENT_CONFIG.get("server_host", "0.0.0.0")
+    p = port or CURRENT_CONFIG.get("server_port", 8778)
+    uvicorn.run(app, host=h, port=p)
 
 if __name__ == "__main__":
     run_server()
+

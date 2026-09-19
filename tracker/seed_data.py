@@ -62,12 +62,12 @@ def seed_sample_history(db_path: str, days_back: int = 15):
 
             # Snapshots for gemini-weekly and gemini-5h
             snapshots.append((
-                ts_str, "Gemini Models", "gemini-weekly", "Weekly Limit Remaining",
+                "default", "You", ts_str, "Gemini Models", "gemini-weekly", "Weekly Limit Remaining",
                 "weekly", round(gemini_rem, 4), round(1.0 - gemini_rem, 4), round(burn, 4),
                 reset_str, "Weekly model quota"
             ))
             snapshots.append((
-                ts_str, "Gemini Models", "gemini-5h", "Five Hour Limit Remaining",
+                "default", "You", ts_str, "Gemini Models", "gemini-5h", "Five Hour Limit Remaining",
                 "5h", round(five_h_rem, 4), round(1.0 - five_h_rem, 4), round(burn * 2.5, 4),
                 (t + timedelta(hours=5)).strftime("%Y-%m-%dT%H:%M:%SZ"), "Five-hour smoothing limit"
             ))
@@ -76,9 +76,9 @@ def seed_sample_history(db_path: str, days_back: int = 15):
 
     cursor.executemany("""
         INSERT INTO usage_snapshots (
-            timestamp, group_name, bucket_id, bucket_name, window_type,
+            user_id, display_name, timestamp, group_name, bucket_id, bucket_name, window_type,
             remaining_fraction, used_fraction, delta_used, reset_time, description
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, snapshots)
 
     conn.commit()
