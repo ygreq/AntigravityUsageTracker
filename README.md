@@ -205,7 +205,7 @@ AntigravityUsageTracker/
 
 ## ☕ Support
 
-If this integration is helpful to you and you'd like to buy me a coffee:
+If this project is helpful to you and you'd like to help, click on:
 
 <a href="https://www.buymeacoffee.com/ygreq">
   <img src="https://img.shields.io/badge/Buy%20Me%20A%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me A Coffee" />
