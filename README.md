@@ -207,9 +207,19 @@ AntigravityUsageTracker/
 
 If this project is helpful to you and you'd like to help, click on:
 
-<a href="https://www.buymeacoffee.com/ygreq">
-  <img src="https://img.shields.io/badge/Buy%20Me%20A%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me A Coffee" />
-</a>
+<p>
+  <a href="https://www.buymeacoffee.com/ygreq" target="_blank">
+    <img src="https://img.shields.io/badge/Buy%20Me%20A%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" height="44" alt="Buy Me A Coffee" />
+  </a>
+  &nbsp;
+  <a href="https://paypal.me/ygreqro" target="_blank">
+    <img src="https://img.shields.io/badge/PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white" height="44" alt="PayPal" />
+  </a>
+  &nbsp;
+  <a href="https://revolut.me/ygreqro" target="_blank">
+    <img src="https://img.shields.io/badge/Revolut-191C1F?style=for-the-badge&logo=revolut&logoColor=white" height="44" alt="Revolut" />
+  </a>
+</p>
 
-Direct link: [buymeacoffee.com/ygreq](https://www.buymeacoffee.com/ygreq)
+Direct links: [buymeacoffee.com/ygreq](https://www.buymeacoffee.com/ygreq) | [paypal.me/ygreqro](https://paypal.me/ygreqro) | [revolut.me/ygreqro](https://revolut.me/ygreqro)
 
